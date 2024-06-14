@@ -33,9 +33,9 @@ class GroundTruth(Node):
     def publish_pose(self, azimuth, elevation, distance):
         pose = Pose()
         distance = distance + DISTANCE_DONE_BY_RASPBERRY_PI
-        pose.position.x = distance * math.cos(-azimuth) * math.cos(np.pi/2-elevation)
-        pose.position.y = distance * math.sin(-azimuth) * math.cos(np.pi/2-elevation)
-        pose.position.z = distance * math.sin(np.pi/2-elevation)
+        pose.position.x = distance * np.cos(np.pi/2 - azimuth) * np.sin(elevation)
+        pose.position.y = distance * np.sin(np.pi/2 - azimuth) * np.sin(elevation)
+        pose.position.z = distance * np.cos(elevation)
         self.publisher.publish(pose)
         self.get_logger().info('Published Pose:')
         self.get_logger().info('X: %f' % pose.position.x)
