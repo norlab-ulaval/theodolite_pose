@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from theodolite_node_msgs.msg import TheodoliteCoordsStamped
 from theodolite_node_msgs.msg import TheodoliteTimeCorrection
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import PoseStamped
 
 DISTANCE_DONE_BY_RASPBERRY_PI = 0.01
 
@@ -19,29 +19,32 @@ class GroundTruth(Node):
             self.listener_callback,
             10)
         self.publisher = self.create_publisher(
-            Pose,
+            PoseStamped,
             '/theodolite_master/theodolite_pose',
             10) 
 
     def listener_callback(self, msg):
         self.get_logger().info('Received Theodolite Data:')
+        self.get_logger().info('Time: %f' % msg.header.stamp.sec)
         self.get_logger().info('Azimuth: %f' % msg.azimuth)
         self.get_logger().info('Elevation: %f' % msg.elevation)
         self.get_logger().info('Distance: %f' % msg.distance)
-        self.publish_pose(msg.azimuth, msg.elevation, msg.distance)
+        self.publish_pose(msg.header.stamp.sec, msg.azimuth, msg.elevation, msg.distance)
     
-    def publish_pose(self, azimuth, elevation, distance):
-        pose = Pose()
+    def publish_pose(self, timestamp, azimuth, elevation, distance):
+        pose = PoseStamped()
         distance = distance + DISTANCE_DONE_BY_RASPBERRY_PI
-        pose.position.x = distance * np.cos(np.pi/2 - azimuth) * np.sin(elevation)
-        pose.position.y = distance * np.sin(np.pi/2 - azimuth) * np.sin(elevation)
-        pose.position.z = distance * np.cos(elevation)
+        pose.header.frame_id = 'base_link'
+        pose.header.stamp.sec = timestamp
+        pose.pose.position.x = distance * np.cos(np.pi/2 - azimuth) * np.sin(elevation)
+        pose.pose.position.y = distance * np.sin(np.pi/2 - azimuth) * np.sin(elevation)
+        pose.pose.position.z = distance * np.cos(elevation)
         self.publisher.publish(pose)
         self.get_logger().info('Published Pose:')
-        self.get_logger().info('X: %f' % pose.position.x)
-        self.get_logger().info('Y: %f' % pose.position.y)
-        self.get_logger().info('Z: %f' % pose.position.z)
-    
+        self.get_logger().info('Time: %f' % pose.header.stamp.sec)
+        self.get_logger().info('X: %f' % pose.pose.position.x)
+        self.get_logger().info('Y: %f' % pose.pose.position.y)
+        self.get_logger().info('Z: %f' % pose.pose.position.z)
     
 def main(args=None):
     rclpy.init(args=args)
