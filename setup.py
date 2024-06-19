@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'ground_truth_theodolite = theodolite_pose.ground_truth_theodolite:main',
+            'calibration = theodolite_pose.calibration:main'
         ],
     },
 )
