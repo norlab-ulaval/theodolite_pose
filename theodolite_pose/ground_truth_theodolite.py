@@ -36,7 +36,7 @@ class GroundTruth(Node):
     def publish_pose(self, sec, nanosec, azimuth, elevation, distance):
         pose = PoseStamped()
         distance = distance + DISTANCE_DONE_BY_RASPBERRY_PI
-        pose.header.frame_id = 'map'
+        pose.header.frame_id = 'theodolite'
         pose.header.stamp.sec = sec
         pose.header.stamp.nanosec = nanosec
         pose.pose.position.x = distance * np.cos(np.pi/2 - azimuth) * np.sin(elevation)
