@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-# from tf2utilities.main import TF2
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
@@ -23,6 +22,8 @@ class Calibration(Node):
         self.current_sums = np.zeros(3)
         self.nb_poses = 0
         self.Q1, self.Q2, self.Q3 = None, None, None
+        self.T_theodo_to_map = None
+        self.T_base_link_to_map = None
         self.tf_acquired = False
 
         self.create_subscription(
@@ -75,8 +76,11 @@ class Calibration(Node):
             elif tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link":
                 self.Q3 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
                 self.get_logger().info(f"Got prism3 transform: {self.Q3}")
+            elif tf.child_frame_id == "base_link" and tf.header.frame_id == "map":
+                self.T_base_link_to_map = np.array(tf.transform)
+                self.get_logger().info(f"Got base_link to map transform: {self.T_base_link_to_map}")
         
-        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None:
+        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_base_link_to_map is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
 
@@ -88,8 +92,9 @@ class Calibration(Node):
         Q = np.array([self.Q1, self.Q2, self.Q3]).T     # prisms in robot frame
         P = np.vstack((P, np.ones((1, P.shape[1]))))
         Q = np.vstack((Q, np.ones((1, Q.shape[1]))))
-        self.T = self.minimization(P.T, Q.T)
-        self.get_logger().info(f"Done! Publishing calibration matrix: {self.T}")
+        self.T_theodo_to_base_link = self.minimization(P.T, Q.T)
+        self.T_theodo_to_map = self.T_base_link_to_map @ self.T_theodo_to_base_link
+        self.get_logger().info(f"Done! Publishing calibration matrix: {self.T_theodo_to_map}")
         self.timer.reset()
 
     def publish_transform(self, T):
@@ -139,7 +144,7 @@ class Calibration(Node):
     
     def timer_callback(self):
         self.get_logger().info("Publishing calibration transform...")
-        self.publish_transform(self.T)
+        self.publish_transform(self.T_theodo_to_map)
 
 def main(args=None):
     rclpy.init(args=args)
