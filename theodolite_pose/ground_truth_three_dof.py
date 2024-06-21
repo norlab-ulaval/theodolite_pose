@@ -190,9 +190,6 @@ class GroundTruth(Node):
 
     def publish_pose(self, position):
         position = np.array([position[0], position[1], position[2], 1])
-        # position = np.linalg.inv(self.T_base_link_to_rslidar32) @ position
-        # position = np.linalg.inv(self.T_map_to_odom) @ np.linalg.inv(self.T_prism1_to_base_link) @ position
-        # position = np.linalg.inv(self.T_prism1_to_base_link) @ position
         self.pose.pose.position.x = position[0]
         self.pose.pose.position.y = position[1]
         self.pose.pose.position.z = position[2]

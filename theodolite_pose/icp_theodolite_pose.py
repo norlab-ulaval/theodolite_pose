@@ -33,7 +33,7 @@ class ICP(Node):
     def tf_callback(self, tf_msg):
         for tf in tf_msg.transforms:
             if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link":
-                self.prism_position = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z, 1])
+                self.prism1_position = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z, 1])
                 self.get_logger().info('Received T_prism1_to_base_link: %s' % self.T_prism1_to_base_link)
                 self.tf_acquired = True
                 self.destroy_subscription(self.tf_static_sub)
@@ -59,7 +59,7 @@ class ICP(Node):
         if self.tf_acquired:
             self.pose = PoseStamped()
             self.T_base_link_to_map = self.pose_to_matrix(msg.pose.pose)
-            position = self.T_base_link_to_map @ self.prism_position
+            position = self.T_base_link_to_map @ self.prism1_position
             self.pose.header = msg.header
             self.pose.pose.position.x = position[0]
             self.pose.pose.position.y = position[1]

@@ -9,6 +9,12 @@ git clone git@github.com:norlab-ulaval/theodolite_pose.git
 ```
 
 ## Usage
+### Execute the theodolite_ground_truth script
+```
+./theodolite_ground_truth.sh
+```
+
+## Launch files
 ### Launch the theodolite_pose node
 ```
 ros2 launch theodolite_pose theodolite_pose.launch.py
