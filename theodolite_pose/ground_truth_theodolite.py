@@ -1,10 +1,7 @@
-import os
-import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from theodolite_node_msgs.msg import TheodoliteCoordsStamped
-from theodolite_node_msgs.msg import TheodoliteTimeCorrection
 from geometry_msgs.msg import PoseStamped
 
 DISTANCE_DONE_BY_RASPBERRY_PI = 0.01

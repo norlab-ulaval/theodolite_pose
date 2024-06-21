@@ -1,0 +1,4 @@
+theodo_pose_node:
+  ros__parameters:
+    input_topic: "/icp_odom"
+    output_topic: "/theodolite_master/icp_theodolite_pose"
