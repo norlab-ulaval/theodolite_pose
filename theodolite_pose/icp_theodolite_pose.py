@@ -9,7 +9,7 @@ from rclpy.qos import qos_profile_action_status_default
 class ICP(Node):
     def __init__(self):
         super().__init__('icp_subscriber')
-        self.input_topic = self.declare_parameter('input_topic', '/icp_odom').value
+        self.input_topic = self.declare_parameter('input_topic', '/mapping/icp_odom').value
         self.output_topic = self.declare_parameter('output_topic', '/theodolite_master/icp_theodolite_pose').value
         self.create_subscription(
             Odometry,
@@ -27,14 +27,14 @@ class ICP(Node):
             self.output_topic,
             10)
         
-        self.T_prism1_to_base_link = None
+        self.prism1_position = None
         self.tf_acquired = False
     
     def tf_callback(self, tf_msg):
         for tf in tf_msg.transforms:
             if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link":
                 self.prism1_position = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z, 1])
-                self.get_logger().info('Received T_prism1_to_base_link: %s' % self.T_prism1_to_base_link)
+                self.get_logger().info('Received T_prism1_to_base_link: %s' % self.prism1_position)
                 self.tf_acquired = True
                 self.destroy_subscription(self.tf_static_sub)
 

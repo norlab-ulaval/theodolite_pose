@@ -47,7 +47,6 @@ class GroundTruth(Node):
         self.T_theodo_to_map = None
         self.T_odom_to_base_link = None
         self.T_map_to_odom = None
-        self.T_base_link_to_rslidar32 = None
         self.tf_acquired = False
         self.calibration_computed = False
         self.timer = self.create_timer(2, self.timer_callback)
@@ -88,13 +87,10 @@ class GroundTruth(Node):
                 self.get_logger().info(f"Got prism3 transform: {self.Q3}")
             elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom":
                 self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
-                self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
+                # self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
             elif tf.child_frame_id == "odom" and tf.header.frame_id == "map":
                 self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
-            elif tf.child_frame_id == "rslidar32" and tf.header.frame_id == "base_link":
-                self.T_base_link_to_rslidar32 = self.tfTransform_to_matrix(tf.transform)
-                self.get_logger().info(f"Got base_link to rslidar32 transform:\n {self.T_base_link_to_rslidar32}")
-        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None and self.T_base_link_to_rslidar32 is not None:
+        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
             self.destroy_subscription(self.tf_static_sub)
