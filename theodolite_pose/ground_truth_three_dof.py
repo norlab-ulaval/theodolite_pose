@@ -113,12 +113,10 @@ class GroundTruth(Node):
         return T
     
     def update_calibration(self,position):
-        nb_meas = 0
         if self.prism_id == -1 or self.euclidian_distance(position, self.prism_positions[self.prism_id]) > 0.3:
             self.prism_id += 1
             if self.prism_id < 3:
                 self.prism_positions.append(position)
-                nb_meas += 1
             self.current_sums = position
             self.nb_poses = 1
             if self.prism_id < 3:
@@ -165,7 +163,7 @@ class GroundTruth(Node):
     def publish_transform(self, T):
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'base_link'
+        t.header.frame_id = 'map'
         t.child_frame_id = 'theodolite'
         t.transform.translation.x = T[0, 3]
         t.transform.translation.y = T[1, 3]
@@ -183,7 +181,7 @@ class GroundTruth(Node):
     
     def timer_callback(self):
         self.get_logger().info("Publishing calibration transform...")
-        self.publish_transform(self.T_base_link_to_theodo)
+        self.publish_transform(self.T_theodo_to_map)
 
     def publish_pose(self, position):
         position = np.array([position[0], position[1], position[2], 1])
