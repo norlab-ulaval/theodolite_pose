@@ -31,7 +31,7 @@ echo "Visualization started, access it with screen -r icp_visualization"
 echo "-----------------------------"
 
 echo "Starting recording"
-screen -dmS record ros2 launch norlab_robot rosbag_record.launch.py
+screen -dmS record ros2 launch norlab_robot rosbag_record.launch.py config:=effie
 echo "Record started, acces it with screen -r record"
 echo "-----------------------------"
 

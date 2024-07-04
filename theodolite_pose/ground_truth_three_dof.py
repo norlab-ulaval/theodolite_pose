@@ -9,7 +9,7 @@ from tf2_ros import TransformBroadcaster
 from tf2_msgs.msg import TFMessage
 from rclpy.qos import qos_profile_action_status_default
 
-DISTANCE_DONE_BY_RASPBERRY_PI = 0.01
+PRISM_CONSTANT = 0.01
 
 class GroundTruth(Node):
     def __init__(self):
@@ -38,10 +38,6 @@ class GroundTruth(Node):
             PoseStamped,
             output_topic,
             10)
-        self.calib_pub = self.create_publisher(
-            PoseStamped,
-            '/theodolite_master/calibration',
-            10)
         self.prism_id = -1
         self.prism_positions = []
         self.current_sums = np.zeros(3)
@@ -61,7 +57,7 @@ class GroundTruth(Node):
             self.pose.header.frame_id = 'theodolite'
             self.pose.header.stamp.sec = msg.header.stamp.sec
             self.pose.header.stamp.nanosec = msg.header.stamp.nanosec
-            distance = msg.distance + DISTANCE_DONE_BY_RASPBERRY_PI
+            distance = msg.distance + PRISM_CONSTANT
             x = distance * np.cos(np.pi/2 - msg.azimuth) * np.sin(msg.elevation)
             y = distance * np.sin(np.pi/2 - msg.azimuth) * np.sin(msg.elevation)
             z = distance * np.cos(msg.elevation)
@@ -88,14 +84,13 @@ class GroundTruth(Node):
             elif tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link" and self.Q3 is None:
                 self.Q3 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
                 self.get_logger().info(f"Got prism3 transform: {self.Q3}")
-            # elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom" and self.T_odom_to_base_link is None:
-            #     self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
-            #     self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
-            # elif tf.child_frame_id == "odom" and tf.header.frame_id == "map" and self.T_map_to_odom is None:
-            #     self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
-            #     self.get_logger().info(f"Got map to odom transform:\n {self.T_map_to_odom}")
-        # if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
-        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None:
+            elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom" and self.T_odom_to_base_link is None:
+                self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
+                self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
+            elif tf.child_frame_id == "odom" and tf.header.frame_id == "map" and self.T_map_to_odom is None:
+                self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
+                self.get_logger().info(f"Got map to odom transform:\n {self.T_map_to_odom}")
+        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
             self.destroy_subscription(self.tf_static_sub)
@@ -147,27 +142,8 @@ class GroundTruth(Node):
         self.T_base_link_to_theodo = self.minimization(P, Q)
         self.T_theodo_to_odom = self.T_odom_to_base_link @ self.T_base_link_to_theodo
         self.T_theodo_to_map = self.T_map_to_odom @ self.T_theodo_to_odom
-        self.get_logger().info(f"Done! Publishing calibration matrix:\n{self.T_theodo_to_map}")
+        self.get_logger().info(f"Done! Publishing calibration matrix:\n{self.T_base_link_to_theodo}")
         self.timer.reset()
-
-        # Publish map origin in theodolite frame
-        self.calib_msg = PoseStamped()
-        self.calib_msg.header.frame_id = 'theodolite'
-        T_theodo_to_base_link = np.linalg.inv(self.T_base_link_to_theodo)
-        self.calib_msg.pose.position.x = T_theodo_to_base_link[0, 3]
-        self.calib_msg.pose.position.y = T_theodo_to_base_link[1, 3]
-        self.calib_msg.pose.position.z = T_theodo_to_base_link[2, 3]
-        # Compute quaternion from rotation matrix
-        q = np.zeros(4)
-        q[0] = np.sqrt(1 + T_theodo_to_base_link[0, 0] + T_theodo_to_base_link[1, 1] + T_theodo_to_base_link[2, 2]) / 2
-        q[1] = (T_theodo_to_base_link[2, 1] - T_theodo_to_base_link[1, 2]) / (4 * q[0])
-        q[2] = (T_theodo_to_base_link[0, 2] - T_theodo_to_base_link[2, 0]) / (4 * q[0])
-        q[3] = (T_theodo_to_base_link[1, 0] - T_theodo_to_base_link[0, 1]) / (4 * q[0])
-        self.calib_msg.pose.orientation.x = q[1]
-        self.calib_msg.pose.orientation.y = q[2]
-        self.calib_msg.pose.orientation.z = q[3]
-        self.calib_msg.pose.orientation.w = q[0]
-        self.calib_pub.publish(self.calib_msg)
 
     def minimization(self, P, Q):
         mu_p = np.mean(P[0:3, :], axis=1)
@@ -206,7 +182,7 @@ class GroundTruth(Node):
     
     def timer_callback(self):
         self.get_logger().info("Publishing calibration transform...")
-        self.publish_transform(self.T_theodo_to_map)
+        self.publish_transform(self.T_base_link_to_theodo)
 
     def publish_pose(self, position):
         position = np.array([position[0], position[1], position[2], 1])
