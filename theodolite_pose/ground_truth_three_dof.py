@@ -77,19 +77,19 @@ class GroundTruth(Node):
             if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link" and self.Q1 is None:
                 self.T_prism1_to_base_link = self.tfTransform_to_matrix(tf.transform)
                 self.Q1 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
-                self.get_logger().info(f"Got prism1 transform: {self.Q1}")
+                self.get_logger().info(f"Prism1 transformation acquired: {self.Q1}")
             elif tf.child_frame_id == "prism2" and tf.header.frame_id == "base_link" and self.Q2 is None:
                 self.Q2 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
-                self.get_logger().info(f"Got prism2 transform: {self.Q2}")
+                self.get_logger().info(f"Prism2 transformation acquired: {self.Q2}")
             elif tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link" and self.Q3 is None:
                 self.Q3 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
-                self.get_logger().info(f"Got prism3 transform: {self.Q3}")
+                self.get_logger().info(f"Prism3 transformation acquired: {self.Q3}")
             elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom" and self.T_odom_to_base_link is None:
                 self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
-                self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
+                self.get_logger().info(f"Odom to base_link transformation acquired.")
             elif tf.child_frame_id == "odom" and tf.header.frame_id == "map" and self.T_map_to_odom is None:
                 self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
-                self.get_logger().info(f"Got map to odom transform:\n {self.T_map_to_odom}")
+                self.get_logger().info(f"Map to odom transformation acquired.")
         if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
@@ -113,10 +113,12 @@ class GroundTruth(Node):
         return T
     
     def update_calibration(self,position):
+        nb_meas = 0
         if self.prism_id == -1 or self.euclidian_distance(position, self.prism_positions[self.prism_id]) > 0.3:
             self.prism_id += 1
             if self.prism_id < 3:
                 self.prism_positions.append(position)
+                nb_meas += 1
             self.current_sums = position
             self.nb_poses = 1
             if self.prism_id < 3:
@@ -125,7 +127,7 @@ class GroundTruth(Node):
             self.current_sums += position
             self.nb_poses += 1
             self.prism_positions[self.prism_id] = self.current_sums / self.nb_poses
-            self.get_logger().info(f"Prism {self.prism_id+1} position: {self.prism_positions[self.prism_id]}")
+            self.get_logger().info(f"Prism {self.prism_id+1}: {self.nb_poses} measurements.")
 
     def euclidian_distance(self, position1, position2):
         return np.sqrt(np.sum((position1 - position2) ** 2))
@@ -138,11 +140,10 @@ class GroundTruth(Node):
         Q = np.array([self.Q1, self.Q2, self.Q3]).T
         P = np.vstack((P, np.ones((1, P.shape[1]))))
         Q = np.vstack((Q, np.ones((1, Q.shape[1]))))
-        print("P\n:", P, "\nQ\n:", Q)
         self.T_base_link_to_theodo = self.minimization(P, Q)
         self.T_theodo_to_odom = self.T_odom_to_base_link @ self.T_base_link_to_theodo
         self.T_theodo_to_map = self.T_map_to_odom @ self.T_theodo_to_odom
-        self.get_logger().info(f"Done! Publishing calibration matrix:\n{self.T_base_link_to_theodo}")
+        self.get_logger().info(f"Calibration computed!")
         self.timer.reset()
 
     def minimization(self, P, Q):
@@ -189,11 +190,7 @@ class GroundTruth(Node):
         self.pose.pose.position.x = position[0]
         self.pose.pose.position.y = position[1]
         self.pose.pose.position.z = position[2]
-        self.get_logger().info('Published Pose:')
-        self.get_logger().info('Time: %d.%09d' % (self.pose.header.stamp.sec, self.pose.header.stamp.nanosec))
-        self.get_logger().info('X: %f' % self.pose.pose.position.x)
-        self.get_logger().info('Y: %f' % self.pose.pose.position.y)
-        self.get_logger().info('Z: %f' % self.pose.pose.position.z)
+        self.get_logger().info(f"Publishing Pose:, Time: {self.pose.header.stamp.sec}.{self.pose.header.stamp.nanosec:.4f}, X: {self.pose.pose.position.x:.4f}, Y: {self.pose.pose.position.y:.4f}, Z: {self.pose.pose.position.z:.4f}")
         self.publisher.publish(self.pose)
 
 def main(args=None):
