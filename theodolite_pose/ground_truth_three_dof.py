@@ -3,8 +3,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from theodolite_node_msgs.msg import TheodoliteCoordsStamped
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import PoseStamped, Pose, TransformStamped
 from nav_msgs.msg import Odometry
 from tf2_ros import TransformBroadcaster
 from tf2_msgs.msg import TFMessage
@@ -39,6 +38,10 @@ class GroundTruth(Node):
             PoseStamped,
             output_topic,
             10)
+        self.calib_pub = self.create_publisher(
+            PoseStamped,
+            '/theodolite_master/calibration',
+            10)
         self.prism_id = -1
         self.prism_positions = []
         self.current_sums = np.zeros(3)
@@ -49,7 +52,7 @@ class GroundTruth(Node):
         self.T_map_to_odom = None
         self.tf_acquired = False
         self.calibration_computed = False
-        self.timer = self.create_timer(2, self.timer_callback)
+        self.timer = self.create_timer(10, self.timer_callback)
         self.timer.cancel()
 
     def listener_callback(self, msg):
@@ -75,22 +78,24 @@ class GroundTruth(Node):
 
     def tf_callback(self, tf_msg):
         for tf in tf_msg.transforms:
-            if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link":
+            if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link" and self.Q1 is None:
                 self.T_prism1_to_base_link = self.tfTransform_to_matrix(tf.transform)
                 self.Q1 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
                 self.get_logger().info(f"Got prism1 transform: {self.Q1}")
-            elif tf.child_frame_id == "prism2" and tf.header.frame_id == "base_link":
+            elif tf.child_frame_id == "prism2" and tf.header.frame_id == "base_link" and self.Q2 is None:
                 self.Q2 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
                 self.get_logger().info(f"Got prism2 transform: {self.Q2}")
-            elif tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link":
+            elif tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link" and self.Q3 is None:
                 self.Q3 = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z])
                 self.get_logger().info(f"Got prism3 transform: {self.Q3}")
-            elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom":
-                self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
-                # self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
-            elif tf.child_frame_id == "odom" and tf.header.frame_id == "map":
-                self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
-        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
+            # elif tf.child_frame_id == "base_link" and tf.header.frame_id == "odom" and self.T_odom_to_base_link is None:
+            #     self.T_odom_to_base_link = self.tfTransform_to_matrix(tf.transform)
+            #     self.get_logger().info(f"Got odom to base_link transform:\n {self.T_odom_to_base_link}")
+            # elif tf.child_frame_id == "odom" and tf.header.frame_id == "map" and self.T_map_to_odom is None:
+            #     self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
+            #     self.get_logger().info(f"Got map to odom transform:\n {self.T_map_to_odom}")
+        # if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
+        if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
             self.destroy_subscription(self.tf_static_sub)
@@ -139,11 +144,30 @@ class GroundTruth(Node):
         P = np.vstack((P, np.ones((1, P.shape[1]))))
         Q = np.vstack((Q, np.ones((1, Q.shape[1]))))
         print("P\n:", P, "\nQ\n:", Q)
-        self.T_theodo_to_base_link = self.minimization(P, Q)
-        self.T_theodo_to_odom = self.T_odom_to_base_link @ self.T_theodo_to_base_link
+        self.T_base_link_to_theodo = self.minimization(P, Q)
+        self.T_theodo_to_odom = self.T_odom_to_base_link @ self.T_base_link_to_theodo
         self.T_theodo_to_map = self.T_map_to_odom @ self.T_theodo_to_odom
         self.get_logger().info(f"Done! Publishing calibration matrix:\n{self.T_theodo_to_map}")
         self.timer.reset()
+
+        # Publish map origin in theodolite frame
+        self.calib_msg = PoseStamped()
+        self.calib_msg.header.frame_id = 'theodolite'
+        T_theodo_to_base_link = np.linalg.inv(self.T_base_link_to_theodo)
+        self.calib_msg.pose.position.x = T_theodo_to_base_link[0, 3]
+        self.calib_msg.pose.position.y = T_theodo_to_base_link[1, 3]
+        self.calib_msg.pose.position.z = T_theodo_to_base_link[2, 3]
+        # Compute quaternion from rotation matrix
+        q = np.zeros(4)
+        q[0] = np.sqrt(1 + T_theodo_to_base_link[0, 0] + T_theodo_to_base_link[1, 1] + T_theodo_to_base_link[2, 2]) / 2
+        q[1] = (T_theodo_to_base_link[2, 1] - T_theodo_to_base_link[1, 2]) / (4 * q[0])
+        q[2] = (T_theodo_to_base_link[0, 2] - T_theodo_to_base_link[2, 0]) / (4 * q[0])
+        q[3] = (T_theodo_to_base_link[1, 0] - T_theodo_to_base_link[0, 1]) / (4 * q[0])
+        self.calib_msg.pose.orientation.x = q[1]
+        self.calib_msg.pose.orientation.y = q[2]
+        self.calib_msg.pose.orientation.z = q[3]
+        self.calib_msg.pose.orientation.w = q[0]
+        self.calib_pub.publish(self.calib_msg)
 
     def minimization(self, P, Q):
         mu_p = np.mean(P[0:3, :], axis=1)
@@ -164,7 +188,7 @@ class GroundTruth(Node):
     def publish_transform(self, T):
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'map'
+        t.header.frame_id = 'base_link'
         t.child_frame_id = 'theodolite'
         t.transform.translation.x = T[0, 3]
         t.transform.translation.y = T[1, 3]
