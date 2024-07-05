@@ -16,61 +16,77 @@ class GroundTruth(Node):
         super().__init__('ground_truth_subscriber')
         input_topic = self.declare_parameter('input_topic', '/theodolite_master/theodolite_data').value
         output_topic = self.declare_parameter('output_topic', '/theodolite_master/theodolite_pose').value
+        self.min_measurements = self.declare_parameter('min_measurements', 3).value
+
         self.create_subscription(
             TheodoliteCoordsStamped,
             input_topic,
-            self.listener_callback,
-            10)
+            self.theodolite_callback,
+            10
+        )
         self.tf_sub = self.create_subscription(
             TFMessage,
             "/tf",
             self.tf_callback,
             10
         )
-        self.tf_broadcaster = TransformBroadcaster(self)
         self.tf_static_sub = self.create_subscription(
             TFMessage, 
             "/tf_static", 
             self.tf_callback, 
             qos_profile_action_status_default
         )
+
         self.publisher = self.create_publisher(
             PoseStamped,
             output_topic,
-            10)
+            10
+        )
+
+        self.tf_broadcaster = TransformBroadcaster(self)
+
+        self.tf_timer = self.create_timer(10, self.tf_timer_callback)
+        self.tf_timer.cancel()
+
+        self.reminder_timer = self.create_timer(0.5, self.reminder_callback)
+        self.reminder_timer.cancel()
+        self.reminder_counter = 0
+
         self.prism_id = -1
         self.prism_positions = []
         self.current_sums = np.zeros(3)
         self.nb_poses = 0
+        self.calibration_computed = False
+
         self.Q1, self.Q2, self.Q3 = None, None, None
         self.T_theodo_to_map = None
         self.T_odom_to_base_link = None
         self.T_map_to_odom = None
         self.tf_acquired = False
-        self.calibration_computed = False
-        self.timer = self.create_timer(10, self.timer_callback)
-        self.timer.cancel()
+    
 
-    def listener_callback(self, msg):
+    def theodolite_callback(self, msg):
         self.pose = PoseStamped()
         if msg.status == 0:
             self.pose.header.frame_id = 'theodolite'
             self.pose.header.stamp.sec = msg.header.stamp.sec
             self.pose.header.stamp.nanosec = msg.header.stamp.nanosec
-            distance = msg.distance + PRISM_CONSTANT
-            x = distance * np.cos(np.pi/2 - msg.azimuth) * np.sin(msg.elevation)
-            y = distance * np.sin(np.pi/2 - msg.azimuth) * np.sin(msg.elevation)
-            z = distance * np.cos(msg.elevation)
-            position = np.array([x, y, z])
+            position = self.theodo_to_cartesian(msg.distance, msg.azimuth, msg.elevation)
+
             if self.calibration_computed:
                 self.publish_pose(position)
-            elif self.prism_id >= 3 and self.euclidian_distance(position, self.prism_positions[0]) < 0.1:
-                self.get_logger().info("Back to prism1, computing calibration...")
+            elif self.prism_id == 2 and self.nb_poses >= self.min_measurements: # and self.euclidian_distance(position, self.prism_positions[0]) < 0.1:
+                self.get_logger().info("Computing calibration...")
                 self.compute_calibration()
-                self.calibration_computed = True
-                self.get_logger().info("Calibration computed!")
             else:
                 self.update_calibration(position)
+
+    def theodo_to_cartesian(self, distance, azimuth, elevation):
+        distance = distance + PRISM_CONSTANT
+        x = distance * np.cos(np.pi/2 - azimuth) * np.sin(elevation)
+        y = distance * np.sin(np.pi/2 - azimuth) * np.sin(elevation)
+        z = distance * np.cos(elevation)
+        return np.array([x, y, z])
 
     def tf_callback(self, tf_msg):
         for tf in tf_msg.transforms:
@@ -90,6 +106,7 @@ class GroundTruth(Node):
             elif tf.child_frame_id == "odom" and tf.header.frame_id == "map" and self.T_map_to_odom is None:
                 self.T_map_to_odom = self.tfTransform_to_matrix(tf.transform)
                 self.get_logger().info(f"Map to odom transformation acquired.")
+
         if self.Q1 is not None and self.Q2 is not None and self.Q3 is not None and self.T_odom_to_base_link is not None and self.T_map_to_odom is not None:
             self.tf_acquired = True
             self.destroy_subscription(self.tf_sub)
@@ -113,19 +130,24 @@ class GroundTruth(Node):
         return T
     
     def update_calibration(self,position):
-        if self.prism_id == -1 or self.euclidian_distance(position, self.prism_positions[self.prism_id]) > 0.3:
+        # Check if we changed prism
+        if self.prism_id == -1 or self.euclidian_distance(position, self.prism_positions[self.prism_id]) > 0.3 and self.nb_poses >= self.min_measurements:
             self.prism_id += 1
-            if self.prism_id < 3:
-                self.prism_positions.append(position)
+            self.prism_positions.append(position)
             self.current_sums = position
             self.nb_poses = 1
-            if self.prism_id < 3:
-                self.get_logger().info(f"New prism detected, now calibrating prism {self.prism_id+1}...")
-        if self.prism_id < 3:
+            self.get_logger().info(f"Prism {self.prism_id+1}: {self.nb_poses} measurements.")
+            
+        # Make sure we stayed on the same prism
+        elif self.euclidian_distance(position, self.prism_positions[self.prism_id]) < 0.03 and self.nb_poses < self.min_measurements:  
             self.current_sums += position
             self.nb_poses += 1
             self.prism_positions[self.prism_id] = self.current_sums / self.nb_poses
             self.get_logger().info(f"Prism {self.prism_id+1}: {self.nb_poses} measurements.")
+
+        else:
+            self.get_logger().info(f"Prism {self.prism_id+1} acquired, move to {self.prism_id+2}.")
+
 
     def euclidian_distance(self, position1, position2):
         return np.sqrt(np.sum((position1 - position2) ** 2))
@@ -133,7 +155,7 @@ class GroundTruth(Node):
     def compute_calibration(self):
         while not self.tf_acquired:
             self.get_logger().info("Waiting for transforms...")
-            time.sleep(0.5)
+            time.sleep(1.0)
         P = np.array(self.prism_positions).T
         Q = np.array([self.Q1, self.Q2, self.Q3]).T
         P = np.vstack((P, np.ones((1, P.shape[1]))))
@@ -142,7 +164,9 @@ class GroundTruth(Node):
         self.T_theodo_to_odom = self.T_odom_to_base_link @ self.T_base_link_to_theodo
         self.T_theodo_to_map = self.T_map_to_odom @ self.T_theodo_to_odom
         self.get_logger().info(f"Calibration computed!")
-        self.timer.reset()
+        self.calibration_computed = True
+        self.tf_timer.reset()  # Enable timer to publish TF
+        self.reminder_timer.reset()
 
     def minimization(self, P, Q):
         mu_p = np.mean(P[0:3, :], axis=1)
@@ -179,16 +203,23 @@ class GroundTruth(Node):
         t.transform.rotation.w = q[0]
         self.tf_broadcaster.sendTransform(t)
     
-    def timer_callback(self):
+    def tf_timer_callback(self):
         self.get_logger().info("Publishing calibration transform...")
         self.publish_transform(self.T_theodo_to_map)
+
+    def reminder_callback(self):
+        self.get_logger().info("DON'T FORGET TO TURN OFF PRISMS 1 AND 2 !!!")
+        self.reminder_counter += 1
+        if self.reminder_counter > 10:
+            self.reminder_timer.cancel()
 
     def publish_pose(self, position):
         position = np.array([position[0], position[1], position[2], 1])
         self.pose.pose.position.x = position[0]
         self.pose.pose.position.y = position[1]
         self.pose.pose.position.z = position[2]
-        self.get_logger().info(f"Publishing Pose:, Time: {self.pose.header.stamp.sec}.{self.pose.header.stamp.nanosec:.4f}, X: {self.pose.pose.position.x:.4f}, Y: {self.pose.pose.position.y:.4f}, Z: {self.pose.pose.position.z:.4f}")
+        timestamp = self.pose.header.stamp.sec + self.pose.header.stamp.nanosec * 1e-9
+        self.get_logger().info(f"Publishing Pose:, Time: {timestamp:.4f}, X: {self.pose.pose.position.x:.4f}, Y: {self.pose.pose.position.y:.4f}, Z: {self.pose.pose.position.z:.4f}")
         self.publisher.publish(self.pose)
 
 def main(args=None):

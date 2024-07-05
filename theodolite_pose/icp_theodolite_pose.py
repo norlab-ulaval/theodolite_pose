@@ -27,14 +27,14 @@ class ICP(Node):
             self.output_topic,
             10)
         
-        self.prism1_position = None
+        self.prism3_position = None
         self.tf_acquired = False
     
     def tf_callback(self, tf_msg):
         for tf in tf_msg.transforms:
-            if tf.child_frame_id == "prism1" and tf.header.frame_id == "base_link":
-                self.prism1_position = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z, 1])
-                self.get_logger().info('Received T_prism1_to_base_link: %s' % self.prism1_position)
+            if tf.child_frame_id == "prism3" and tf.header.frame_id == "base_link":
+                self.prism3_position = np.array([tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z, 1])
+                self.get_logger().info('Received T_prism3_to_base_link: %s' % self.prism3_position)
                 self.tf_acquired = True
                 self.destroy_subscription(self.tf_static_sub)
 
@@ -59,17 +59,14 @@ class ICP(Node):
         if self.tf_acquired:
             self.pose = PoseStamped()
             self.T_base_link_to_map = self.pose_to_matrix(msg.pose.pose)
-            position = self.T_base_link_to_map @ self.prism1_position
+            position = self.T_base_link_to_map @ self.prism3_position
             self.pose.header = msg.header
             self.pose.pose.position.x = position[0]
             self.pose.pose.position.y = position[1]
             self.pose.pose.position.z = position[2]
             self.publisher.publish(self.pose)
-            self.get_logger().info(f'Published {self.input_topic} to {self.output_topic} in base_link frame:')
-            self.get_logger().info('Time: %d.%09d' % (self.pose.header.stamp.sec, self.pose.header.stamp.nanosec))
-            self.get_logger().info('X: %f' % self.pose.pose.position.x)
-            self.get_logger().info('Y: %f' % self.pose.pose.position.y)
-            self.get_logger().info('Z: %f' % self.pose.pose.position.z)
+            timestamp = self.pose.header.stamp.sec + self.pose.header.stamp.nanosec * 1e-9
+            self.get_logger().info(f"Publishing Pose:, Time: {timestamp:.4f}, X: {self.pose.pose.position.x:.4f}, Y: {self.pose.pose.position.y:.4f}, Z: {self.pose.pose.position.z:.4f}")
 
 def main(args=None):
     rclpy.init(args=args)

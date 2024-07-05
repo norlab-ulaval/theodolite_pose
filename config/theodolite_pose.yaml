@@ -2,3 +2,4 @@ theodo_pose_node:
   ros__parameters:
     input_topic: "/theodolite_master/theodolite_data"
     output_topic: "/theodolite_master/theodolite_pose"
+    min_measurements: 3
