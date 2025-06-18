@@ -8,7 +8,7 @@ screen -r -S "sensors" -X quit
 screen -r -S "mapping" -X quit
 screen -r -S "theodolite" -X quit
 screen -r -S "icp_visualization" -X quit
-screen -r -S "record" -X quit
+# screen -r -S "record" -X quit
 
 echo "Starting sensors..."
 screen -dmS sensors ros2 launch norlab_robot sensors.launch.py
@@ -30,8 +30,8 @@ screen -dmS visualization ros2 launch theodolite_pose icp_pose.launch.py
 echo "Visualization started, access it with screen -r icp_visualization"
 echo "-----------------------------"
 
-echo "Starting recording"
-screen -dmS record ros2 launch norlab_robot rosbag_record.launch.py config:=effie
-echo "Record started, acces it with screen -r record"
-echo "-----------------------------"
+# echo "Starting recording"
+# screen -dmS record ros2 launch norlab_robot rosbag_record.launch.py config:=effie
+# echo "Record started, acces it with screen -r record"
+# echo "-----------------------------"
 
