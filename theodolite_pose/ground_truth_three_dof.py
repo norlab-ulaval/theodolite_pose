@@ -14,8 +14,8 @@ PRISM_CONSTANT = 0.01
 class GroundTruth(Node):
     def __init__(self):
         super().__init__('ground_truth_subscriber')
-        input_topic = self.declare_parameter('input_topic', '/theodolite_master/theodolite_data').value
-        output_topic = self.declare_parameter('output_topic', '/theodolite_master/theodolite_pose').value
+        input_topic = self.declare_parameter('input_topic', '/theodolite_data').value
+        output_topic = self.declare_parameter('output_topic', '/theodolite_pose').value
         self.min_measurements = self.declare_parameter('min_measurements', 3).value
 
         self.create_subscription(
