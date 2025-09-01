@@ -23,7 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pose_node = theodolite_pose.ground_truth_three_dof:main',
+            'theodolite_pose_node = theodolite_pose.ground_truth_three_dof:main',
             'icp_pose = theodolite_pose.icp_theodolite_pose:main'
         ],
     },

@@ -8,14 +8,17 @@ def generate_launch_description():
     share_folder = get_package_share_directory('theodolite_pose')
     config_file = os.path.join(share_folder, 'config', 'theodolite_pose.yaml')
 
-    theodo_pose_node = Node(
+    theodolite_pose_node = Node(
         package='theodolite_pose',
-        executable='pose_node',
-        name='pose_node',
+        executable='theodolite_pose_node',
+        name='theodolite_pose_node',
         output='screen',
-        parameters=[config_file]
+        parameters=[
+            config_file,
+            {'use_sim_time': True}
+        ]
     )
 
     return LaunchDescription([
-        theodo_pose_node
-        ])
+        theodolite_pose_node
+    ])
