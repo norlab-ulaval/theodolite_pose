@@ -15,8 +15,8 @@ class GroundTruth(Node):
         super().__init__('ground_truth_subscriber')
         self.input_topic = self.declare_parameter('input_topic', '/theodolite_data').value
         self.output_topic = self.declare_parameter('output_topic', '/theodolite_pose').value
-        self.rts_frame = self.declare_parameter('rts_frame', 'rts').value
-        self.robot_frame = self.declare_parameter('robot_frame', 'base_link').value
+        self.reference_frame = self.declare_parameter('reference_frame', 'trajectory').value
+        self.robot_frame = self.declare_parameter('robot_frame', 'prism3').value
         self.min_measurements = self.declare_parameter('min_measurements', 3).value
 
         # TF setup
@@ -171,7 +171,7 @@ class GroundTruth(Node):
     def publish_pose(self, position):
 
         pose = PoseStamped()
-        pose.header.frame_id = self.rts_frame
+        pose.header.frame_id = self.reference_frame
         pose.header.stamp = self.get_clock().now().to_msg()
         pose.pose.position.x = position[0]
         pose.pose.position.y = position[1]

@@ -2,6 +2,6 @@ theodolite_pose_node:
   ros__parameters:
     input_topic: "/theodolite_data"
     output_topic: "/theodolite_pose"
-    rts_frame: "rts"
-    robot_frame: "base_link"
+    reference_frame: "trajectory"
+    robot_frame: "prism3"
     min_measurements: 3
