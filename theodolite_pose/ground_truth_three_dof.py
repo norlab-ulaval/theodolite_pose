@@ -138,7 +138,7 @@ class GroundTruth(Node):
             # Apply initial transform to align with reference frame
             position_homogeneous = np.array([position[0], position[1], position[2], 1])
             transformed_position = self.initial_TF @ position_homogeneous
-            self.publish_pose(transformed_position[:3])
+            self.publish_pose(transformed_position[:3], msg.header.stamp)
 
 
     def rts_to_cartesian(self, distance, azimuth, elevation):
@@ -168,11 +168,11 @@ class GroundTruth(Node):
         return T
     
 
-    def publish_pose(self, position):
+    def publish_pose(self, position, timestamp):
 
         pose = PoseStamped()
         pose.header.frame_id = self.reference_frame
-        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.stamp = timestamp
         pose.pose.position.x = position[0]
         pose.pose.position.y = position[1]
         pose.pose.position.z = position[2]
